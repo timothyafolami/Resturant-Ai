@@ -1,0 +1,32 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+.DS_Store
+.vscode/
+.idea/
+*.log
+.env.*
+*.db
+*.egg-info/
+dist/
+build/
+node_modules/
+*.bak
+*.swp
+*.swo
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+# Test and coverage
+.coverage
+htmlcov/
+.tox/
+.cache/
+.mypy_cache/
+.pytest_cache/
+# Jupyter
+.ipynb_checkpoints

@@ -1,0 +1,2 @@
+We should have a table for the stock usage that would be used to monitor the stock usage and then on a daily report thing we check the stock usage history and then the one remainaing and give some recommendation on what to do
+to avoid running out of stock, this is more of a forecasting solution. 
