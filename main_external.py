@@ -6,13 +6,14 @@ Provides menu information and dining assistance for restaurant customers.
 
 import os
 import sys
+import asyncio
 from dotenv import load_dotenv
 
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.agent.chat_agents import run_external_chat
-from src.utils.logging import setup_logger
+from src.agent.chat_agents import run_external_chat_async
+from src.utils.logging import setup_logger, get_context_logger
 
 # Load environment variables
 load_dotenv()
@@ -28,7 +29,7 @@ def main():
     print("explore our delicious menu and find the perfect meal!")
     print("Type 'quit', 'exit', or 'bye' to end our conversation.")
     print("="*50)
-    
+    ctx_logger = get_context_logger("external")
     # Example commands to help customers get started
     print("\n💡 Try asking me about:")
     print("• What's on the menu today?")
@@ -57,10 +58,15 @@ def main():
                 continue
             
             print("\n🤖 Let me help you with that...")
-            
-            # Run external customer chat
-            response = run_external_chat(user_input, thread_id)
-            
+
+            # Log user question
+            ctx_logger.info(f"[thread={thread_id}] User: {user_input}")
+
+            # Run external customer chat (async)
+            response = asyncio.run(run_external_chat_async(user_input, thread_id))
+            # Log assistant response
+            ctx_logger.info(f"[thread={thread_id}] Assistant: {response}")
+
             print(f"\n🍽️ Restaurant Assistant:\n{response}")
             
             # thread_id is already stable; nothing to do

@@ -1,4 +1,5 @@
 from typing import Optional, List, Dict, Any
+import json
 from datetime import datetime, date
 from decimal import Decimal
 from langchain_core.tools import tool
@@ -15,12 +16,6 @@ from src.db_models.database import (
     DailyMenuItemTable
 )
 from src.utils.logging import setup_logger
-from src.models import (
-    Employee as EmployeeModel,
-    Recipe as RecipeModel,
-    DailyMenuItem as DailyMenuItemModel,
-    MenuItemStatus,
-)
 
 logger = setup_logger()
 
@@ -36,7 +31,8 @@ def query_employees(
     shift_filter: Optional[str] = None,
     status_filter: Optional[str] = None,
     min_performance: Optional[float] = None,
-    limit: int = 20
+    limit: int = 20,
+    output_format: str = "text",
 ) -> str:
     """Query employee information with various filters.
     
@@ -76,31 +72,29 @@ def query_employees(
         employees = query.order_by(EmployeeTable.first_name).limit(limit).all()
         
         if not employees:
-            return "No employees found matching the criteria."
-        
+            return "No employees found matching the criteria." if output_format == "text" else json.dumps({"type":"employees","items":[]})
+
+        if output_format == "json":
+            items = []
+            for e in employees:
+                items.append({
+                    "employee_id": e.employee_id,
+                    "first_name": e.first_name,
+                    "last_name": e.last_name,
+                    "email": e.email,
+                    "phone": e.phone,
+                    "position": e.position,
+                    "department": e.department,
+                    "shift_type": e.shift_type,
+                    "performance_rating": float(e.performance_rating),
+                    "tenure_months": int(e.tenure_months),
+                    "status": e.status,
+                })
+            db.close()
+            return json.dumps({"type":"employees","count":len(items),"items":items})
+
         result_lines = ["👥 Employee Information:"]
         for emp in employees:
-            # Validate shape using Pydantic model (internal use)
-            try:
-                _ = EmployeeModel(
-                    employee_id=emp.employee_id,
-                    first_name=emp.first_name,
-                    last_name=emp.last_name,
-                    email=emp.email,
-                    phone=emp.phone,
-                    position=emp.position,
-                    department=emp.department,
-                    hire_date=emp.hire_date,
-                    tenure_months=emp.tenure_months,
-                    salary=emp.salary,
-                    performance_rating=emp.performance_rating,
-                    shift_type=emp.shift_type,
-                    status=emp.status,
-                    created_at=emp.created_at,
-                    updated_at=emp.updated_at,
-                )
-            except Exception:
-                pass
             result_lines.append(
                 f"• {emp.first_name} {emp.last_name} ({emp.employee_id})\n"
                 f"  Position: {emp.position} | Department: {emp.department}\n"
@@ -108,7 +102,6 @@ def query_employees(
                 f"  Tenure: {emp.tenure_months} months | Status: {emp.status}\n"
                 f"  Email: {emp.email} | Phone: {emp.phone}"
             )
-        
         db.close()
         return "\n\n".join(result_lines)
         
@@ -125,36 +118,42 @@ def get_employee_performance_stats(department: Optional[str] = None) -> str:
     """
     try:
         db = get_db()
-        query = db.query(EmployeeTable)
-        
+        base = db.query(
+            func.count().label("cnt"),
+            func.avg(EmployeeTable.performance_rating).label("avg_rating"),
+            func.avg(EmployeeTable.tenure_months).label("avg_tenure"),
+        )
         if department:
-            query = query.filter(EmployeeTable.department.ilike(f"%{department}%"))
-        
-        employees = query.all()
-        
-        if not employees:
+            base = base.filter(EmployeeTable.department.ilike(f"%{department}%"))
+        totals = base.one()
+        total_employees = int(totals.cnt or 0)
+        if total_employees == 0:
             return "No employees found."
-        
-        # Calculate statistics
-        total_employees = len(employees)
-        avg_performance = sum(emp.performance_rating for emp in employees) / total_employees
-        avg_tenure = sum(emp.tenure_months for emp in employees) / total_employees
-        
-        # Performance distribution
-        high_performers = len([emp for emp in employees if emp.performance_rating >= 4.0])
-        low_performers = len([emp for emp in employees if emp.performance_rating < 3.0])
-        
+        avg_performance = float(totals.avg_rating or 0.0)
+        avg_tenure = float(totals.avg_tenure or 0.0)
+
+        # Performance buckets
+        q_high = db.query(func.count()).filter(EmployeeTable.performance_rating >= 4.0)
+        if department:
+            q_high = q_high.filter(EmployeeTable.department.ilike(f"%{department}%"))
+        high_performers = q_high.scalar() or 0
+
+        q_low = db.query(func.count()).filter(EmployeeTable.performance_rating < 3.0)
+        if department:
+            q_low = q_low.filter(EmployeeTable.department.ilike(f"%{department}%"))
+        low_performers = q_low.scalar() or 0
+
         # Department breakdown
-        dept_stats = {}
-        for emp in employees:
-            if emp.department not in dept_stats:
-                dept_stats[emp.department] = {"count": 0, "avg_rating": 0}
-            dept_stats[emp.department]["count"] += 1
-            
-        for dept in dept_stats:
-            dept_employees = [emp for emp in employees if emp.department == dept]
-            dept_stats[dept]["avg_rating"] = sum(emp.performance_rating for emp in dept_employees) / len(dept_employees)
-        
+        dept_rows = (
+            db.query(
+                EmployeeTable.department,
+                func.count().label("cnt"),
+                func.avg(EmployeeTable.performance_rating).label("avg_rating"),
+            )
+            .group_by(EmployeeTable.department)
+            .all()
+        )
+
         result_lines = [
             "📊 Employee Performance Statistics:",
             f"Total Employees: {total_employees}",
@@ -162,16 +161,34 @@ def get_employee_performance_stats(department: Optional[str] = None) -> str:
             f"Average Tenure: {avg_tenure:.1f} months",
             f"High Performers (4.0+): {high_performers} ({high_performers/total_employees*100:.1f}%)",
             f"Low Performers (<3.0): {low_performers} ({low_performers/total_employees*100:.1f}%)",
-            "",
-            "Department Breakdown:"
         ]
-        
-        for dept, stats in dept_stats.items():
-            result_lines.append(f"• {dept}: {stats['count']} employees, avg rating {stats['avg_rating']:.2f}")
-        
+
+        # JSON
+        stats_json = {
+            "type": "employee_stats",
+            "department_filter": department,
+            "total": total_employees,
+            "avg_performance": round(avg_performance, 2),
+            "avg_tenure_months": round(avg_tenure, 1),
+            "high_performers": int(high_performers),
+            "low_performers": int(low_performers),
+            "departments": [
+                {"department": dept, "count": int(cnt), "avg_rating": round(float(avg or 0),2)}
+                for dept, cnt, avg in dept_rows
+            ],
+        }
+
+        # Text
+        if department is not None:
+            result_lines.append("")
+            result_lines.append("Department Breakdown:")
+            for dept, cnt, avg in dept_rows:
+                result_lines.append(f"• {dept}: {cnt} employees, avg rating {float(avg or 0):.2f}")
+
         db.close()
+        # For backward compat, keep returning text. Planner sets JSON via output_format on other tools.
         return "\n".join(result_lines)
-        
+
     except Exception as e:
         logger.error(f"Error getting performance stats: {str(e)}")
         return f"❌ Error getting performance stats: {str(e)}"
@@ -187,7 +204,8 @@ def query_storage_inventory(
     location_filter: Optional[str] = None,
     low_stock_only: bool = False,
     expired_items_only: bool = False,
-    limit: int = 20
+    limit: int = 20,
+    output_format: str = "text",
 ) -> str:
     """Query storage inventory with various filters.
     
@@ -224,8 +242,27 @@ def query_storage_inventory(
         items = query.order_by(StorageItemTable.item_name).limit(limit).all()
         
         if not items:
-            return "No storage items found matching the criteria."
-        
+            return "No storage items found matching the criteria." if output_format == "text" else json.dumps({"type":"storage","items":[]})
+
+        if output_format == "json":
+            items_json = []
+            for it in items:
+                items_json.append({
+                    "item_id": it.item_id,
+                    "item_name": it.item_name,
+                    "category": it.category,
+                    "location": it.storage_location,
+                    "current_stock": float(it.current_stock),
+                    "minimum_stock": float(it.minimum_stock),
+                    "unit": it.unit,
+                    "is_low_stock": bool(it.is_low_stock),
+                    "expiry_date": it.expiry_date.isoformat() if it.expiry_date else None,
+                    "supplier": it.supplier,
+                    "cost_per_unit": float(it.cost_per_unit),
+                })
+            db.close()
+            return json.dumps({"type":"storage","count":len(items_json),"items":items_json})
+
         result_lines = ["📦 Storage Inventory:"]
         for item in items:
             stock_status = "🔴 LOW STOCK" if item.is_low_stock else "✅ OK"
@@ -255,7 +292,7 @@ def get_low_stock_alerts() -> str:
         low_stock_items = db.query(StorageItemTable).filter(StorageItemTable.is_low_stock == True).all()
         
         if not low_stock_items:
-            return "✅ No items are currently below minimum stock levels."
+            return json.dumps({"type":"low_stock","items":[]})
         
         result_lines = [
             "🚨 LOW STOCK ALERTS:",
@@ -264,7 +301,7 @@ def get_low_stock_alerts() -> str:
         ]
         
         for item in low_stock_items:
-            deficit = item.minimum_stock - item.current_stock
+            deficit = float(item.minimum_stock - item.current_stock)
             result_lines.append(
                 f"• {item.item_name}\n"
                 f"  Current: {item.current_stock} {item.unit} | Minimum: {item.minimum_stock} {item.unit}\n"
@@ -289,7 +326,8 @@ def query_recipes(
     cuisine_filter: Optional[str] = None,
     max_prep_time: Optional[int] = None,
     difficulty_level: Optional[int] = None,
-    limit: int = 20
+    limit: int = 20,
+    output_format: str = "text",
 ) -> str:
     """Query recipes with various filters.
     
@@ -322,8 +360,25 @@ def query_recipes(
         recipes = query.order_by(RecipeTable.dish_name).limit(limit).all()
         
         if not recipes:
-            return "No recipes found matching the criteria."
-        
+            return "No recipes found matching the criteria." if output_format == "text" else json.dumps({"type":"recipes","items":[]})
+
+        if output_format == "json":
+            items = []
+            for r in recipes:
+                items.append({
+                    "recipe_id": r.recipe_id,
+                    "dish_name": r.dish_name,
+                    "category": r.category,
+                    "cuisine_type": r.cuisine_type,
+                    "difficulty_level": int(r.difficulty_level),
+                    "prep_time_minutes": int(r.prep_time_minutes),
+                    "cook_time_minutes": int(r.cook_time_minutes),
+                    "serving_size": int(r.serving_size),
+                    "cost_per_serving": float(r.cost_per_serving),
+                })
+            db.close()
+            return json.dumps({"type":"recipes","count":len(items),"items":items})
+
         result_lines = ["👨‍🍳 Recipe Information:"]
         for recipe in recipes:
             total_time = recipe.prep_time_minutes + recipe.cook_time_minutes
@@ -356,7 +411,7 @@ def get_recipe_details(recipe_id: str) -> str:
         recipe = db.query(RecipeTable).filter(RecipeTable.recipe_id == recipe_id).first()
         
         if not recipe:
-            return f"Recipe with ID {recipe_id} not found."
+            return json.dumps({"type":"recipe_details","recipe_id":recipe_id,"found":False,"message":"not_found"})
         
         # Get ingredients
         ingredients = db.query(RecipeIngredientTable).filter(
@@ -394,8 +449,37 @@ def get_recipe_details(recipe_id: str) -> str:
         if recipe.allergens:
             result_lines.append(f"⚠️ Allergens: {', '.join(recipe.allergens)}")
         
+        # JSON version
+        rd = {
+            "type": "recipe_details",
+            "found": True,
+            "recipe": {
+                "recipe_id": recipe.recipe_id,
+                "dish_name": recipe.dish_name,
+                "category": recipe.category,
+                "cuisine_type": recipe.cuisine_type,
+                "difficulty_level": int(recipe.difficulty_level),
+                "prep_time_minutes": int(recipe.prep_time_minutes),
+                "cook_time_minutes": int(recipe.cook_time_minutes),
+                "serving_size": int(recipe.serving_size),
+                "instructions": recipe.instructions or [],
+                "allergens": recipe.allergens or [],
+                "cost_per_serving": float(recipe.cost_per_serving),
+            },
+            "ingredients": [
+                {
+                    "ingredient_name": ing.ingredient_name,
+                    "quantity": float(ing.quantity),
+                    "unit": ing.unit,
+                    "percentage": float(ing.percentage),
+                    "timing": ing.timing,
+                    "notes": ing.notes,
+                }
+                for ing in ingredients
+            ],
+        }
         db.close()
-        return "\n".join(result_lines)
+        return "\n".join(result_lines)  # keep text; planner typically uses JSON on menu tools
         
     except Exception as e:
         logger.error(f"Error getting recipe details: {str(e)}")
@@ -411,7 +495,8 @@ def query_daily_menu(
     location: Optional[str] = None,
     category_filter: Optional[str] = None,
     price_range: Optional[str] = None,
-    dietary_restrictions: Optional[str] = None
+    dietary_restrictions: Optional[str] = None,
+    output_format: str = "text",
 ) -> str:
     """Query daily menu items with various filters.
     
@@ -471,8 +556,39 @@ def query_daily_menu(
         items = items_query.order_by(DailyMenuItemTable.category, DailyMenuItemTable.dish_name).all()
         
         if not items:
-            return "No menu items found matching the criteria."
-        
+            return "No menu items found matching the criteria." if output_format == "text" else json.dumps({"type":"daily_menu","date":str(target_date),"items":[]})
+
+        if output_format == "json":
+            locations: Dict[str, List[Dict[str, Any]]] = {}
+            for item in items:
+                menu = next(m for m in menus if m.menu_id == item.menu_id)
+                loc = menu.restaurant_location
+                if loc not in locations:
+                    locations[loc] = []
+                locations[loc].append({
+                    "dish_name": item.dish_name,
+                    "price": float(item.price),
+                    "status": item.status,
+                    "description": item.description,
+                    "category": item.category,
+                    "estimated_prep_time": int(item.estimated_prep_time),
+                    "is_vegetarian": bool(item.is_vegetarian),
+                    "is_vegan": bool(item.is_vegan),
+                    "is_gluten_free": bool(item.is_gluten_free),
+                    "spicy_level": int(item.spicy_level) if item.spicy_level is not None else None,
+                    "available_quantity": int(item.available_quantity) if item.available_quantity is not None else None,
+                    "calories": int(item.calories) if item.calories is not None else None,
+                })
+            payload = {
+                "type": "daily_menu",
+                "date": target_date.isoformat(),
+                "locations": [
+                    {"location": loc, "items": lst} for loc, lst in locations.items()
+                ],
+            }
+            db.close()
+            return json.dumps(payload)
+
         result_lines = [f"🍽️ Daily Menu for {target_date}:"]
         
         # Group by menu/location
@@ -556,7 +672,7 @@ def get_menu_item_details(dish_name: str, menu_date: Optional[str] = None) -> st
         ).first()
         
         if not menu_item:
-            return f"Menu item '{dish_name}' not found for date {target_date}."
+            return json.dumps({"type":"menu_item_details","found":False,"dish_name":dish_name,"date":str(target_date)})
         
         # Get the associated recipe
         recipe = db.query(RecipeTable).filter(RecipeTable.recipe_id == menu_item.recipe_id).first()
@@ -564,27 +680,6 @@ def get_menu_item_details(dish_name: str, menu_date: Optional[str] = None) -> st
         # Get menu info
         menu = db.query(DailyMenuTable).filter(DailyMenuTable.menu_id == menu_item.menu_id).first()
         
-        # Validate using Pydantic models (internal use)
-        try:
-            _menu_item_model = DailyMenuItemModel(
-                menu_item_id=menu_item.menu_item_id,
-                recipe_id=menu_item.recipe_id,
-                dish_name=menu_item.dish_name,
-                description=menu_item.description,
-                category=menu_item.category,
-                price=menu_item.price,
-                status=menu_item.status,
-                estimated_prep_time=menu_item.estimated_prep_time,
-                available_quantity=menu_item.available_quantity,
-                spicy_level=menu_item.spicy_level,
-                is_vegetarian=menu_item.is_vegetarian,
-                is_vegan=menu_item.is_vegan,
-                is_gluten_free=menu_item.is_gluten_free,
-                calories=menu_item.calories,
-            )
-        except Exception:
-            _menu_item_model = None
-
         result_lines = [
             f"🍽️ {menu_item.dish_name}",
             f"📍 Location: {menu.restaurant_location}",
@@ -613,24 +708,6 @@ def get_menu_item_details(dish_name: str, menu_date: Optional[str] = None) -> st
         
         # Recipe information
         if recipe:
-            try:
-                _ = RecipeModel(
-                    recipe_id=recipe.recipe_id,
-                    dish_name=recipe.dish_name,
-                    category=recipe.category,
-                    cuisine_type=recipe.cuisine_type,
-                    difficulty_level=recipe.difficulty_level,
-                    prep_time_minutes=recipe.prep_time_minutes,
-                    cook_time_minutes=recipe.cook_time_minutes,
-                    serving_size=recipe.serving_size,
-                    ingredients=[],  # skipping detailed join here
-                    instructions=recipe.instructions or [],
-                    allergens=recipe.allergens or [],
-                    nutritional_info=recipe.nutritional_info or {},
-                    cost_per_serving=recipe.cost_per_serving,
-                )
-            except Exception:
-                pass
             result_lines.extend([
                 "👨‍🍳 Recipe Information:",
                 f"Cuisine: {recipe.cuisine_type}",
@@ -643,6 +720,34 @@ def get_menu_item_details(dish_name: str, menu_date: Optional[str] = None) -> st
             if recipe.allergens:
                 result_lines.append(f"⚠️ Allergens: {', '.join(recipe.allergens)}")
         
+        # JSON structure
+        payload = {
+            "type": "menu_item_details",
+            "found": True,
+            "date": target_date.isoformat(),
+            "location": menu.restaurant_location,
+            "dish": {
+                "dish_name": menu_item.dish_name,
+                "price": float(menu_item.price),
+                "description": menu_item.description,
+                "estimated_prep_time": int(menu_item.estimated_prep_time),
+                "status": menu_item.status,
+                "spicy_level": int(menu_item.spicy_level) if menu_item.spicy_level is not None else None,
+                "is_vegetarian": bool(menu_item.is_vegetarian),
+                "is_vegan": bool(menu_item.is_vegan),
+                "is_gluten_free": bool(menu_item.is_gluten_free),
+                "calories": int(menu_item.calories) if menu_item.calories is not None else None,
+                "available_quantity": int(menu_item.available_quantity) if menu_item.available_quantity is not None else None,
+            },
+            "recipe": {
+                "recipe_id": recipe.recipe_id if recipe else None,
+                "cuisine_type": recipe.cuisine_type if recipe else None,
+                "difficulty_level": int(recipe.difficulty_level) if recipe else None,
+                "total_cook_time": int((recipe.prep_time_minutes + recipe.cook_time_minutes)) if recipe else None,
+                "serving_size": int(recipe.serving_size) if recipe else None,
+                "allergens": recipe.allergens if (recipe and recipe.allergens) else [],
+            },
+        }
         db.close()
         return "\n".join(result_lines)
         

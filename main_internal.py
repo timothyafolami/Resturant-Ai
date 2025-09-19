@@ -7,13 +7,14 @@ Provides access to employee, recipe, inventory, and menu data for restaurant sta
 import os
 import sys
 import uuid
+import asyncio
 from dotenv import load_dotenv
 
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.agent.chat_agents import run_internal_chat
-from src.utils.logging import setup_logger
+from src.agent.chat_agents import run_internal_chat_async
+from src.utils.logging import setup_logger, get_context_logger
 
 # Load environment variables
 load_dotenv()
@@ -29,7 +30,7 @@ def main():
     print("Ask questions about employees, recipes, inventory, or menu items.")
     print("Type 'quit', 'exit', or 'bye' to end the session.")
     print("="*50)
-    
+    ctx_logger = get_context_logger("internal")
     # Example commands to help staff get started
     print("\n💡 Example commands:")
     print("• Show me all employees in the kitchen department")
@@ -59,10 +60,15 @@ def main():
                 continue
             
             print("\n🤖 Processing your request...")
-            
-            # Run internal chat
-            response = run_internal_chat(user_input, thread_id)
-            
+
+            # Log user question
+            ctx_logger.info(f"[thread={thread_id}] User: {user_input}")
+
+            # Run internal chat (async)
+            response = asyncio.run(run_internal_chat_async(user_input, thread_id))
+            # Log assistant response
+            ctx_logger.info(f"[thread={thread_id}] Assistant: {response}")
+
             print(f"\n📊 System Response:\n{response}")
             
             # thread_id is already stable; nothing to do

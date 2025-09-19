@@ -76,6 +76,21 @@ For customers:
 python main_external.py
 ```
 
+### Streamlit UI (optional)
+
+Run a clean multi‑page chat UI for staff and customers:
+
+```bash
+streamlit run app_streamlit/Home.py
+```
+
+Notes:
+- Two pages: Internal Staff Chat and Customer Chat
+- Uses Streamlit chat components (`st.chat_message`, `st.chat_input`)
+- Example prompts in the sidebar and a “New conversation” button
+- Settings panel: theme (Auto/Light/Dark), model temperature, and follow‑up suggestions toggle
+- Logs go to files under `logs/` (set `AI_CONSOLE_LOGS=1` to show logs in console)
+
 ## 🎯 Usage Examples
 
 ### Internal Staff Queries
@@ -137,7 +152,7 @@ The system includes synthetic data generators that create:
 |----------|-------------|----------|
 | `GROQ_API_KEY` | Your Groq API key for LLM access | Yes |
 | `DATABASE_URL` | PostgreSQL connection string | Yes |
-| `MODEL_NAME` | Groq model name (default: llama3-groq-70b-8192-tool-use-preview) | No |
+| `MODEL_NAME` | LLM model name. Use `llama3-70b-8192` for Groq (default), or an OpenAI model like `gpt-4o-mini` if using OpenAI. | No |
 
 ### Database Setup
 
