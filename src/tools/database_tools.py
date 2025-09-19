@@ -5,7 +5,7 @@ from langchain_core.tools import tool
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc, asc, func
 
-from src.database import (
+from src.db_models.database import (
     get_db, 
     EmployeeTable, 
     StorageItemTable, 
@@ -14,7 +14,13 @@ from src.database import (
     DailyMenuTable, 
     DailyMenuItemTable
 )
-from src.logging_config import setup_logger
+from src.utils.logging import setup_logger
+from src.models import (
+    Employee as EmployeeModel,
+    Recipe as RecipeModel,
+    DailyMenuItem as DailyMenuItemModel,
+    MenuItemStatus,
+)
 
 logger = setup_logger()
 
@@ -74,6 +80,27 @@ def query_employees(
         
         result_lines = ["👥 Employee Information:"]
         for emp in employees:
+            # Validate shape using Pydantic model (internal use)
+            try:
+                _ = EmployeeModel(
+                    employee_id=emp.employee_id,
+                    first_name=emp.first_name,
+                    last_name=emp.last_name,
+                    email=emp.email,
+                    phone=emp.phone,
+                    position=emp.position,
+                    department=emp.department,
+                    hire_date=emp.hire_date,
+                    tenure_months=emp.tenure_months,
+                    salary=emp.salary,
+                    performance_rating=emp.performance_rating,
+                    shift_type=emp.shift_type,
+                    status=emp.status,
+                    created_at=emp.created_at,
+                    updated_at=emp.updated_at,
+                )
+            except Exception:
+                pass
             result_lines.append(
                 f"• {emp.first_name} {emp.last_name} ({emp.employee_id})\n"
                 f"  Position: {emp.position} | Department: {emp.department}\n"
@@ -537,6 +564,27 @@ def get_menu_item_details(dish_name: str, menu_date: Optional[str] = None) -> st
         # Get menu info
         menu = db.query(DailyMenuTable).filter(DailyMenuTable.menu_id == menu_item.menu_id).first()
         
+        # Validate using Pydantic models (internal use)
+        try:
+            _menu_item_model = DailyMenuItemModel(
+                menu_item_id=menu_item.menu_item_id,
+                recipe_id=menu_item.recipe_id,
+                dish_name=menu_item.dish_name,
+                description=menu_item.description,
+                category=menu_item.category,
+                price=menu_item.price,
+                status=menu_item.status,
+                estimated_prep_time=menu_item.estimated_prep_time,
+                available_quantity=menu_item.available_quantity,
+                spicy_level=menu_item.spicy_level,
+                is_vegetarian=menu_item.is_vegetarian,
+                is_vegan=menu_item.is_vegan,
+                is_gluten_free=menu_item.is_gluten_free,
+                calories=menu_item.calories,
+            )
+        except Exception:
+            _menu_item_model = None
+
         result_lines = [
             f"🍽️ {menu_item.dish_name}",
             f"📍 Location: {menu.restaurant_location}",
@@ -565,6 +613,24 @@ def get_menu_item_details(dish_name: str, menu_date: Optional[str] = None) -> st
         
         # Recipe information
         if recipe:
+            try:
+                _ = RecipeModel(
+                    recipe_id=recipe.recipe_id,
+                    dish_name=recipe.dish_name,
+                    category=recipe.category,
+                    cuisine_type=recipe.cuisine_type,
+                    difficulty_level=recipe.difficulty_level,
+                    prep_time_minutes=recipe.prep_time_minutes,
+                    cook_time_minutes=recipe.cook_time_minutes,
+                    serving_size=recipe.serving_size,
+                    ingredients=[],  # skipping detailed join here
+                    instructions=recipe.instructions or [],
+                    allergens=recipe.allergens or [],
+                    nutritional_info=recipe.nutritional_info or {},
+                    cost_per_serving=recipe.cost_per_serving,
+                )
+            except Exception:
+                pass
             result_lines.extend([
                 "👨‍🍳 Recipe Information:",
                 f"Cuisine: {recipe.cuisine_type}",

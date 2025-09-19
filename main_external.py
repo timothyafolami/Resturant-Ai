@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.agent.chat_agents import run_external_chat
-from src.logging_config import setup_logger
+from src.utils.logging import setup_logger
 
 # Load environment variables
 load_dotenv()
@@ -39,7 +39,8 @@ def main():
     print("• What are your chef's recommendations?")
     print("-"*50)
     
-    thread_id = None
+    # Use a stable thread id for conversational memory
+    thread_id = "customer_session"
     
     while True:
         try:
@@ -62,9 +63,7 @@ def main():
             
             print(f"\n🍽️ Restaurant Assistant:\n{response}")
             
-            # Set thread_id for conversation continuity
-            if thread_id is None:
-                thread_id = "customer_session"
+            # thread_id is already stable; nothing to do
                 
         except KeyboardInterrupt:
             print("\n\n👋 Thank you for your interest! Hope to see you soon!")

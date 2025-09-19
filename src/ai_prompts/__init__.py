@@ -1,0 +1,2 @@
+"""AI prompts package"""
+

@@ -183,7 +183,8 @@ Ai-Track/
 │   ├── database.py              # SQLAlchemy models and setup
 │   ├── models.py                # Pydantic models
 │   ├── prompts.py               # System prompts and configs
-│   ├── data_generator.py        # Synthetic data generation
+│   ├── utils/
+│   │   └── data_generator.py    # Synthetic data generation
 │   └── config.py                # Environment configuration
 ├── main_internal.py             # Internal staff chat app
 ├── main_external.py             # Customer chat app

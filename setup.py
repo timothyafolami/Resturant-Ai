@@ -12,9 +12,9 @@ from pathlib import Path
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.database import create_tables, drop_tables
-from src.data_generator import populate_database
-from src.logging_config import setup_logger
+from src.db_models.database import create_tables, drop_tables
+from src.utils.data_generator import populate_database
+from src.utils.logging import setup_logger
 
 logger = setup_logger()
 

@@ -1,7 +1,7 @@
 from typing import Optional
 from langchain_core.tools import tool
-from src.memory_store import MemoryStore
-from src.logging_config import setup_logger
+from src.memory.store import MemoryStore
+from src.utils.logging import setup_logger
 
 
 logger = setup_logger()
@@ -72,5 +72,3 @@ def delete_memory(thread_id: str, memory_id: str) -> str:
 
 
 AGENT_MEMORY_TOOLS = [save_memory, list_memories, search_memory, delete_memory]
-
-

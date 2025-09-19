@@ -1,5 +1,5 @@
 from langchain_groq import ChatGroq
-from .config import get_settings
+from src.configs.config import get_settings
 
 
 _settings = get_settings()
@@ -12,4 +12,3 @@ llm = ChatGroq(
 )
 
 __all__ = ["llm"]
-

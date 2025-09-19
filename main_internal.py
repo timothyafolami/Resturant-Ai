@@ -6,13 +6,14 @@ Provides access to employee, recipe, inventory, and menu data for restaurant sta
 
 import os
 import sys
+import uuid
 from dotenv import load_dotenv
 
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.agent.chat_agents import run_internal_chat
-from src.logging_config import setup_logger
+from src.utils.logging import setup_logger
 
 # Load environment variables
 load_dotenv()
@@ -39,7 +40,9 @@ def main():
     print("• Show me the recipe details for Spaghetti Carbonara")
     print("-"*50)
     
-    thread_id = None
+    # Use a unique thread id per CLI session; allows fresh conversation context
+    base_thread_id = "internal_staff_session"
+    thread_id = f"{base_thread_id}:{uuid.uuid4().hex}"
     
     while True:
         try:
@@ -62,9 +65,7 @@ def main():
             
             print(f"\n📊 System Response:\n{response}")
             
-            # Set thread_id for conversation continuity
-            if thread_id is None:
-                thread_id = "internal_staff_session"
+            # thread_id is already stable; nothing to do
                 
         except KeyboardInterrupt:
             print("\n\n👋 Session interrupted. Have a great day!")

@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import List, Dict, Any
 from faker import Faker
 
-from src.database import (
+from src.db_models.database import (
     SessionLocal, 
     EmployeeTable, 
     StorageItemTable, 
@@ -20,7 +20,7 @@ from src.database import (
     DailyMenuItemTable,
     create_tables
 )
-from src.logging_config import setup_logger
+from src.utils.logging import setup_logger
 
 fake = Faker()
 logger = setup_logger()
@@ -405,3 +405,4 @@ def populate_database():
 
 if __name__ == "__main__":
     populate_database()
+

@@ -1,6 +1,5 @@
 import os
 from dataclasses import dataclass
-from typing import Optional
 from dotenv import load_dotenv
 
 
@@ -18,11 +17,11 @@ def get_settings() -> Settings:
     key = os.getenv("GROQ_API_KEY")
     model = os.getenv("MODEL_NAME") or "llama3-groq-70b-8192-tool-use-preview"
     db_url = os.getenv("DATABASE_URL") or "postgresql://user:password@localhost:5432/restaurant_crm"
-    
+
     if not key:
         raise RuntimeError(
             "GROQ_API_KEY is not set. Create a .env file with GROQ_API_KEY=... or export the variable."
         )
-    
+
     return Settings(groq_api_key=key, model_name=model, database_url=db_url)
 

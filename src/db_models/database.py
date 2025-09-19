@@ -1,4 +1,5 @@
 import os
+from typing import cast
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date
 from decimal import Decimal
@@ -9,13 +10,17 @@ from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from dotenv import load_dotenv
 
-from src.logging_config import setup_logger
+from src.utils.logging import setup_logger
 
 load_dotenv()
 logger = setup_logger()
 
-# Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/restaurant_crm")
+# Database configuration (prefer psycopg3 driver)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://user:password@localhost:5432/restaurant_crm")
+
+# Normalize DSN to psycopg3 if a generic postgresql scheme is provided
+if DATABASE_URL.startswith("postgresql://") and "+psycopg" not in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 
 engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -41,7 +46,7 @@ class EmployeeTable(Base):
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     email = Column(String(255), unique=True, nullable=False)
-    phone = Column(String(20), nullable=False)
+    phone = Column(String(50), nullable=False)
     position = Column(String(100), nullable=False)
     department = Column(String(100), nullable=False)
     hire_date = Column(Date, nullable=False)

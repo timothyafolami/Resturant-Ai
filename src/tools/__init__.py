@@ -4,7 +4,6 @@ from .memory_tools import (
     search_memory,
     delete_memory,
     AGENT_MEMORY_TOOLS,
-    save_style_profile,
 )
 from .database_tools import (
     query_employees,
@@ -24,7 +23,6 @@ __all__ = [
     "search_memory",
     "delete_memory",
     "AGENT_MEMORY_TOOLS",
-    "save_style_profile",
     "query_employees",
     "get_employee_performance_stats",
     "query_storage_inventory",
