@@ -406,17 +406,38 @@ def query_recipes(
 
 
 @tool
-def get_recipe_details(recipe_id: str) -> str:
+def get_recipe_details(recipe_id: Optional[str] = None, dish_name: Optional[str] = None) -> str:
     """Get detailed information about a specific recipe including ingredients and instructions.
-    
-    - recipe_id: The unique recipe identifier
+
+    - recipe_id: The unique recipe identifier (preferred if known)
+    - dish_name: Dish name to look up (used when recipe_id is not provided)
     """
     try:
         db = get_db()
-        recipe = db.query(RecipeTable).filter(RecipeTable.recipe_id == recipe_id).first()
+        recipe = None
+        if recipe_id:
+            recipe = db.query(RecipeTable).filter(RecipeTable.recipe_id == recipe_id).first()
+        elif dish_name:
+            # Prefer exact case-insensitive match, otherwise first ilike match
+            exact = db.query(RecipeTable).filter(RecipeTable.dish_name.ilike(dish_name)).first()
+            if exact:
+                recipe = exact
+            else:
+                recipe = (
+                    db.query(RecipeTable)
+                    .filter(RecipeTable.dish_name.ilike(f"%{dish_name}%"))
+                    .order_by(RecipeTable.dish_name)
+                    .first()
+                )
         
         if not recipe:
-            return json.dumps({"type":"recipe_details","recipe_id":recipe_id,"found":False,"message":"not_found"})
+            return json.dumps({
+                "type": "recipe_details",
+                "found": False,
+                "recipe_id": recipe_id,
+                "dish_name": dish_name,
+                "message": "not_found",
+            })
         
         # Get ingredients
         ingredients = db.query(RecipeIngredientTable).filter(

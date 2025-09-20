@@ -171,8 +171,11 @@ def create_internal_chat_app():
             if not (args.get("dish_name") and str(args.get("dish_name")).strip()):
                 return "Which dish would you like details for? You can optionally specify a date (YYYY-MM-DD)."
         if tool == "get_recipe_details":
-            if not (args.get("recipe_id") and str(args.get("recipe_id")).strip()):
-                return "Please provide the recipe_id to view its full details."
+            # Accept either recipe_id or dish_name; don't force recipe_id
+            has_id = args.get("recipe_id") and str(args.get("recipe_id")).strip()
+            has_name = args.get("dish_name") and str(args.get("dish_name")).strip()
+            if not (has_id or has_name):
+                return "Which recipe would you like details for? You can specify the dish name."
         if tool == "query_daily_menu":
             # If no filters at all, ask to narrow to reduce result size
             if not any(args.get(k) for k in ["menu_date", "location", "category_filter", "price_range", "dietary_restrictions"]):

@@ -60,6 +60,7 @@ def plan_query(message: str, user_type: str = "internal") -> Optional[Plan]:
         "Examples:\n"
         "{\"tool\": \"query_daily_menu\", \"args\": {\"menu_date\": \"2025-01-03\", \"category_filter\": \"dessert\", \"output_format\": \"json\"}}\n"
         "{\"tool\": \"query_employees\", \"args\": {\"department_filter\": \"kitchen\", \"output_format\": \"json\"}}\n"
+        "{\"tool\": \"get_recipe_details\", \"args\": {\"dish_name\": \"Spaghetti Carbonara\"}}\n"
         "If information is missing (e.g., date/location), keep args minimal and avoid restrictive filters."
     )
     sys_text = (
@@ -102,6 +103,7 @@ async def aplan_query(message: str, user_type: str = "internal") -> Optional[Pla
     schema_hint = (
         "Return strict JSON with keys: tool (one of: " + ", ".join(tools) + ") and args (object).\n"
         "Do NOT include any 'limit' argument; fetch full results unless the user explicitly requests a sample or page.\n"
+        "{\"tool\": \"get_recipe_details\", \"args\": {\"dish_name\": \"Spaghetti Carbonara\"}}\n"
         "If information is missing (e.g., date/location), keep args minimal and avoid restrictive filters."
     )
     sys_text = (
