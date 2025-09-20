@@ -16,13 +16,53 @@ load_dotenv()
 logger = setup_logger()
 
 # Database configuration (prefer psycopg3 driver)
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://user:password@localhost:5432/restaurant_crm")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg://user:password@localhost:5432/restaurant_crm",
+)
 
-# Normalize DSN to psycopg3 if a generic postgresql scheme is provided
-if DATABASE_URL.startswith("postgresql://") and "+psycopg" not in DATABASE_URL:
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 
-engine = create_engine(DATABASE_URL, echo=False)
+def _ensure_psycopg_driver(url: str) -> str:
+    if url.startswith("postgresql://") and "+psycopg" not in url and "+psycopg2" not in url:
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return url
+
+
+def _ensure_ssl(url: str) -> str:
+    try:
+        host = url.split("@", 1)[1].split("/", 1)[0]
+    except Exception:
+        host = ""
+    if "render.com" in host and "sslmode=" not in url and url.startswith("postgresql"):
+        sep = "&" if "?" in url else "?"
+        return f"{url}{sep}sslmode=require"
+    return url
+
+
+def _create_engine_with_fallback(url: str):
+    """Create SQLAlchemy engine with psycopg3 preferred, fallback to psycopg2 if needed."""
+    normalized = _ensure_psycopg_driver(_ensure_ssl(url))
+    try:
+        return create_engine(normalized, echo=False)
+    except Exception as e:
+        # Fallback to psycopg2 driver if psycopg is missing/unavailable in the runtime
+        if "+psycopg" in normalized or normalized.startswith("postgresql+psycopg"):
+            fallback = normalized.replace("+psycopg", "+psycopg2")
+        elif normalized.startswith("postgresql://"):
+            fallback = normalized.replace("postgresql://", "postgresql+psycopg2://", 1)
+        else:
+            fallback = normalized
+        try:
+            logger.warning(
+                f"psycopg engine init failed ({str(e)[:120]}). Trying psycopg2 fallback."
+            )
+            return create_engine(fallback, echo=False)
+        except Exception:
+            # Re-raise original error for clarity
+            raise
+
+
+engine = _create_engine_with_fallback(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
