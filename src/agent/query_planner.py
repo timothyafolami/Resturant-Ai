@@ -56,11 +56,11 @@ def plan_query(message: str, user_type: str = "internal") -> Optional[Plan]:
     tools = _allowed_tools(user_type)
     schema_hint = (
         "Return strict JSON with keys: tool (one of: " + ", ".join(tools) + ") and args (object).\n"
+        "Do NOT include any 'limit' argument; fetch full results unless the user explicitly requests a sample or page.\n"
         "Examples:\n"
         "{\"tool\": \"query_daily_menu\", \"args\": {\"menu_date\": \"2025-01-03\", \"category_filter\": \"dessert\", \"output_format\": \"json\"}}\n"
-        "{\"tool\": \"query_employees\", \"args\": {\"department_filter\": \"kitchen\", \"limit\": 10, \"output_format\": \"json\"}}\n"
-        "If information is missing (e.g., date/location), propose args with sensible defaults and keep it minimal. "
-        "Prefer args.output_format = \"json\"."
+        "{\"tool\": \"query_employees\", \"args\": {\"department_filter\": \"kitchen\", \"output_format\": \"json\"}}\n"
+        "If information is missing (e.g., date/location), keep args minimal and avoid restrictive filters."
     )
     sys_text = (
         "You are a restaurant CRM query planner. Map the user request to exactly one database tool and arguments.\n"
@@ -101,8 +101,8 @@ async def aplan_query(message: str, user_type: str = "internal") -> Optional[Pla
     tools = _allowed_tools(user_type)
     schema_hint = (
         "Return strict JSON with keys: tool (one of: " + ", ".join(tools) + ") and args (object).\n"
-        "If information is missing (e.g., date/location), propose args with sensible defaults and keep it minimal. "
-        "Prefer args.output_format = \"json\"."
+        "Do NOT include any 'limit' argument; fetch full results unless the user explicitly requests a sample or page.\n"
+        "If information is missing (e.g., date/location), keep args minimal and avoid restrictive filters."
     )
     sys_text = (
         "You are a restaurant CRM query planner. Map the user request to exactly one database tool and arguments.\n"

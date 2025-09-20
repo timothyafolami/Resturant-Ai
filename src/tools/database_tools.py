@@ -31,7 +31,7 @@ def query_employees(
     shift_filter: Optional[str] = None,
     status_filter: Optional[str] = None,
     min_performance: Optional[float] = None,
-    limit: int = 20,
+    limit: Optional[int] = None,
     output_format: str = "text",
 ) -> str:
     """Query employee information with various filters.
@@ -69,7 +69,9 @@ def query_employees(
         if min_performance:
             query = query.filter(EmployeeTable.performance_rating >= min_performance)
         
-        employees = query.order_by(EmployeeTable.first_name).limit(limit).all()
+        # Compute total before limiting so callers can distinguish total vs returned
+        total = query.count()
+        employees = query.order_by(EmployeeTable.first_name).all()
         
         if not employees:
             return "No employees found matching the criteria." if output_format == "text" else json.dumps({"type":"employees","items":[]})
@@ -91,9 +93,12 @@ def query_employees(
                     "status": e.status,
                 })
             db.close()
-            return json.dumps({"type":"employees","count":len(items),"items":items})
+            return json.dumps({"type":"employees","total": int(total),"items": items})
 
-        result_lines = ["👥 Employee Information:"]
+        result_lines = [
+            "👥 Employee Information:",
+            f"Total employees: {total}",
+        ]
         for emp in employees:
             result_lines.append(
                 f"• {emp.first_name} {emp.last_name} ({emp.employee_id})\n"
@@ -204,7 +209,7 @@ def query_storage_inventory(
     location_filter: Optional[str] = None,
     low_stock_only: bool = False,
     expired_items_only: bool = False,
-    limit: int = 20,
+    limit: Optional[int] = None,
     output_format: str = "text",
 ) -> str:
     """Query storage inventory with various filters.
@@ -239,7 +244,7 @@ def query_storage_inventory(
                 StorageItemTable.expiry_date <= today
             ))
         
-        items = query.order_by(StorageItemTable.item_name).limit(limit).all()
+        items = query.order_by(StorageItemTable.item_name).all()
         
         if not items:
             return "No storage items found matching the criteria." if output_format == "text" else json.dumps({"type":"storage","items":[]})
@@ -326,7 +331,7 @@ def query_recipes(
     cuisine_filter: Optional[str] = None,
     max_prep_time: Optional[int] = None,
     difficulty_level: Optional[int] = None,
-    limit: int = 20,
+    limit: Optional[int] = None,
     output_format: str = "text",
 ) -> str:
     """Query recipes with various filters.
@@ -357,7 +362,7 @@ def query_recipes(
         if difficulty_level:
             query = query.filter(RecipeTable.difficulty_level == difficulty_level)
         
-        recipes = query.order_by(RecipeTable.dish_name).limit(limit).all()
+        recipes = query.order_by(RecipeTable.dish_name).all()
         
         if not recipes:
             return "No recipes found matching the criteria." if output_format == "text" else json.dumps({"type":"recipes","items":[]})
