@@ -13,5 +13,5 @@ python-dotenv==1.1.0
 sqlalchemy==2.0.43
 faker==37.8.0
 langgraph==0.6.7
-psycopg==3.2.10
+psycopg-binary==3.2.10
 streamlit==1.49.1
