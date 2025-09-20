@@ -25,14 +25,14 @@ with st.sidebar:
         "Show me all employees in the kitchen department",
         "What recipes use chicken breast?",
         "Check low stock alerts",
-        "What's on today's menu?",
+        "What's on today's menu at Downtown?",
         "Get performance stats for all employees",
         "Show me the recipe details for Spaghetti Carbonara",
     ]
     for ex in examples:
         if st.button(ex, use_container_width=True):
             st.session_state._internal_prefill = ex
-            st.experimental_rerun()
+            st.rerun()
 
     st.divider()
     st.subheader("Settings")
@@ -55,7 +55,7 @@ with st.sidebar:
     if st.button("New conversation", type="primary", use_container_width=True):
         st.session_state.internal_messages = []
         st.session_state.internal_thread_id = f"internal_staff_session:streamlit:{uuid.uuid4().hex}"
-        st.experimental_rerun()
+        st.rerun()
 
     st.caption("Session")
     st.code(st.session_state.get("internal_thread_id", ""), language="text")

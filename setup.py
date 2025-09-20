@@ -14,7 +14,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.db_models.database import create_tables, drop_tables
 from src.utils.data_generator import populate_database
-from src.utils.logging import setup_logger
+from src.utils.app_logging import setup_logger
 
 logger = setup_logger()
 

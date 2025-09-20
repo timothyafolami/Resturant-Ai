@@ -15,7 +15,7 @@ from src.db_models.database import (
     DailyMenuTable, 
     DailyMenuItemTable
 )
-from src.utils.logging import setup_logger
+from src.utils.app_logging import setup_logger
 
 logger = setup_logger()
 

@@ -13,7 +13,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.agent.chat_agents import run_internal_chat, run_external_chat
 from src.db_models.database import SessionLocal, EmployeeTable, StorageItemTable, RecipeTable, DailyMenuTable
-from src.utils.logging import setup_logger
+from src.utils.app_logging import setup_logger
 
 # Load environment variables
 load_dotenv()

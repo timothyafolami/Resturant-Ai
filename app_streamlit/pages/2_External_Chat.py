@@ -31,7 +31,7 @@ with st.sidebar:
     for ex in examples:
         if st.button(ex, use_container_width=True):
             st.session_state._external_prefill = ex
-            st.experimental_rerun()
+            st.rerun()
 
     st.divider()
     st.subheader("Settings")
@@ -53,7 +53,7 @@ with st.sidebar:
     if st.button("New conversation", type="primary", use_container_width=True):
         st.session_state.external_messages = []
         st.session_state.external_thread_id = f"customer_session:streamlit:{uuid.uuid4().hex}"
-        st.experimental_rerun()
+        st.rerun()
 
     st.caption("Session")
     st.code(st.session_state.get("external_thread_id", ""), language="text")

@@ -10,7 +10,7 @@ from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from dotenv import load_dotenv
 
-from src.utils.logging import setup_logger
+from src.utils.app_logging import setup_logger
 
 load_dotenv()
 logger = setup_logger()

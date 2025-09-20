@@ -10,7 +10,7 @@ from langgraph.prebuilt import ToolNode
 import asyncio
 from pydantic import BaseModel
 
-from src.utils.logging import setup_logger, get_context_logger
+from src.utils.app_logging import setup_logger, get_context_logger
 from src.utils.llm import llm
 from src.tools import ALL_TOOLS, DATABASE_TOOLS, AGENT_MEMORY_TOOLS
 from src.tools.memory_tools import store
