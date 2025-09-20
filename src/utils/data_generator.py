@@ -29,9 +29,10 @@ from src.db_models.database import (
     DailyMenuItemTable,
     create_tables
 )
-from src.utils.app_logging import setup_logger
+from src.utils.app_logging import setup_logger, enable_console_logging
 
 fake = Faker()
+enable_console_logging()  # Show logs when running generator from terminal
 logger = setup_logger()
 
 # Restaurant data constants

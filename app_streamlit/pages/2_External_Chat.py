@@ -93,3 +93,5 @@ if prompt:
                 reply = f"❌ Sorry, something went wrong: {e}"
         st.markdown(reply)
     st.session_state.external_messages.append(("assistant", reply))
+
+# (log viewer removed by request)

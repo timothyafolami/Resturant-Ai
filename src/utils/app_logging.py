@@ -6,6 +6,7 @@ import sys
 
 _CONFIGURED = False
 _SINKS_ADDED = False
+_CONSOLE_ADDED = False
 _DEFAULT_PATH = "logs/ai_agent.log"
 
 
@@ -14,11 +15,13 @@ def _ensure_logs_dir(path: str) -> None:
     p.mkdir(parents=True, exist_ok=True)
 
 
-def setup_logger(log_path: str = _DEFAULT_PATH):
+def setup_logger(log_path: str = None):
     global _CONFIGURED
     if _CONFIGURED:
         return logger
 
+    # Allow override via env var
+    log_path = log_path or os.getenv("AI_LOG_PATH", _DEFAULT_PATH)
     _ensure_logs_dir(log_path)
     logger.remove()
     logger.add(
@@ -30,11 +33,7 @@ def setup_logger(log_path: str = _DEFAULT_PATH):
     )
     # Optional console logging (disabled by default). Enable by setting AI_CONSOLE_LOGS=1
     if str(os.getenv("AI_CONSOLE_LOGS", "")).lower() in {"1", "true", "yes", "on"}:
-        logger.add(
-            sys.stderr,
-            level="INFO",
-            format="🤖 {time:HH:mm:ss} | {level} | {message}",
-        )
+        enable_console_logging()
     _CONFIGURED = True
     return logger
 
@@ -75,3 +74,16 @@ def get_context_logger(context: str = "internal"):
     setup_logger()
     _ensure_chat_sinks()
     return logger.bind(context=context)
+
+
+def enable_console_logging(level: str = "INFO"):
+    global _CONSOLE_ADDED
+    if _CONSOLE_ADDED:
+        return logger
+    logger.add(
+        sys.stderr,
+        level=level,
+        format="🤖 {time:HH:mm:ss} | {level} | {message}",
+    )
+    _CONSOLE_ADDED = True
+    return logger

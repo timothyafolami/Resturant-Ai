@@ -153,6 +153,23 @@ def create_internal_chat_app():
         last_human = next((m.content for m in reversed(state.messages) if isinstance(m, HumanMessage)), "")
         from src.agent.query_planner import aplan_query
         pl = await aplan_query(last_human, user_type="internal")
+        # Heuristic: if planner picked recipe details but omitted identifiers,
+        # try to extract a dish name from the latest user message.
+        try:
+            if pl and getattr(pl, "tool", None) == "get_recipe_details":
+                args = getattr(pl, "args", {}) or {}
+                has_id = args.get("recipe_id") and str(args.get("recipe_id")).strip()
+                has_name = args.get("dish_name") and str(args.get("dish_name")).strip()
+                if not (has_id or has_name):
+                    import re
+                    m = re.search(r"(?:for|about)\s+([A-Za-z0-9][^\n\r]+)$", last_human, flags=re.IGNORECASE)
+                    if m:
+                        guess = m.group(1).strip().strip(".?!'\" ")
+                        if guess:
+                            args["dish_name"] = guess
+                            pl.args = args
+        except Exception:
+            pass
         get_context_logger("internal").info(
             f"Plan: {{'tool': {getattr(pl, 'tool', None)}, 'args': {getattr(pl, 'args', None)}}}"
         )

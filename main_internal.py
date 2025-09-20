@@ -14,11 +14,12 @@ from dotenv import load_dotenv
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.agent.chat_agents import run_internal_chat_async
-from src.utils.app_logging import setup_logger, get_context_logger
+from src.utils.app_logging import setup_logger, get_context_logger, enable_console_logging
 
 # Load environment variables
 load_dotenv()
 
+enable_console_logging()  # Always show logs in terminal for CLI
 logger = setup_logger()
 
 
