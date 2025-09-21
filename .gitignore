@@ -30,3 +30,4 @@ htmlcov/
 .pytest_cache/
 # Jupyter
 .ipynb_checkpoints
+data/agent_memory.sqlite*

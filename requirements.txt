@@ -16,3 +16,5 @@ langgraph==0.6.7
 psycopg-binary==3.2.10
 psycopg2-binary==2.9.10
 streamlit==1.49.1
+langgraph-checkpoint-sqlite==2.0.11
+aiosqlite==0.21.0

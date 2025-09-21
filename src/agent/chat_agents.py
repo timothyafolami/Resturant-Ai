@@ -6,7 +6,13 @@ from typing import List, Any, Optional, Annotated
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode
+try:
+    from langgraph.prebuilt.tool_node import ToolNode  # LangGraph >=0.4.8 module form
+except ModuleNotFoundError:  # pragma: no cover - older LangGraph builds
+    try:
+        from langgraph.prebuilt import ToolNode  # type: ignore
+    except (ModuleNotFoundError, ImportError):
+        ToolNode = None  # type: ignore[assignment]
 import asyncio
 from pydantic import BaseModel
 
@@ -405,9 +411,16 @@ def create_external_chat_app():
 
 def create_unified_chat_app():
     """Create unified chat application that routes based on user type"""
+    if ToolNode is None:
+        raise ImportError(
+            "ToolNode is unavailable in this LangGraph build. "
+            "Install `langgraph-prebuilt>=0.6.4` or pin `langgraph` to a version "
+            "that includes `prebuilt.tool_node`, or avoid using the unified chat app."
+        )
+
     # All tools available for routing
     workflow = StateGraph(ChatState)
-    
+
     # Add nodes
     workflow.add_node("router", router_node)
     workflow.add_node("tools", ToolNode(ALL_TOOLS))
