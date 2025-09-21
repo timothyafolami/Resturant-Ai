@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import re
 import os
+import json
 
 from typing import List, Any, Optional, Annotated
 
@@ -26,6 +29,104 @@ from src.ai_prompts.prompts import INTERNAL_AGENT_CONFIG, EXTERNAL_AGENT_CONFIG
 
 logger = setup_logger()
 
+MAX_CONTEXT_MESSAGES = 6
+
+
+async def _rewrite_user_query(state: ChatState, last_user: str) -> Optional[str]:
+    """Rewrite the latest user turn into a standalone query using recent context."""
+
+    if not last_user:
+        return None
+
+    transcript_parts: List[str] = []
+    for msg in list(state.messages)[-MAX_CONTEXT_MESSAGES:]:
+        if isinstance(msg, HumanMessage):
+            transcript_parts.append(f"User: {msg.content}")
+        elif isinstance(msg, AIMessage):
+            transcript_parts.append(f"Assistant: {msg.content}")
+
+    summary_text = state.summary or "(none)"
+    transcript = "\n".join(transcript_parts) if transcript_parts else "(no additional turns)"
+
+    prompt = [
+        SystemMessage(content=(
+            "You are an assistant that rewrites user requests so downstream planners have full context. "
+            "Use the conversation history to make the latest user message self-contained. "
+            "If the assistant just asked a clarifying question, incorporate the user's reply to answer it. "
+            "Reference explicit dish or menu names when they were listed earlier. "
+            "If no rewrite is necessary, respond with NO_REWRITE."
+        )),
+        HumanMessage(content=(
+            "Conversation summary:\n"
+            f"{summary_text}\n\n"
+            "Recent conversation:\n"
+            f"{transcript}\n\n"
+            "Original user request:\n"
+            f"{last_user}\n\n"
+            "Rewrite the user's request into a single concise sentence that a planner can execute. "
+            "If nothing needs to change, reply exactly with NO_REWRITE."
+        )),
+    ]
+
+    try:
+        rewritten = await llm.ainvoke(prompt)
+    except Exception:
+        return None
+
+    text = getattr(rewritten, "content", "")
+    normalized = (text or "").strip()
+    if not normalized or normalized.upper().startswith("NO_REWRITE"):
+        return None
+    return normalized
+
+
+async def _infer_recipe_from_context(state: ChatState, user_text: str) -> Optional[str]:
+    """Use the LLM to infer which specific recipe the user refers to."""
+
+    last_ai = next((m.content for m in reversed(state.messages) if isinstance(m, AIMessage)), "")
+    transcript_parts: List[str] = []
+    for msg in list(state.messages)[-MAX_CONTEXT_MESSAGES:]:
+        if isinstance(msg, HumanMessage):
+            transcript_parts.append(f"User: {msg.content}")
+        elif isinstance(msg, AIMessage):
+            transcript_parts.append(f"Assistant: {msg.content}")
+
+    prompt = [
+        SystemMessage(content=(
+            "You help resolve which specific recipe a user means based on prior conversation. "
+            "Choose an exact dish name that appeared previously. If you cannot determine a single dish, respond with {\"dish_name\": null}. "
+            "Reply strictly with JSON."
+        )),
+        HumanMessage(content=(
+            "Recent conversation:\n"
+            f"{os.linesep.join(transcript_parts)}\n\n"
+            f"Most recent assistant message:\n{last_ai}\n\n"
+            f"Latest user text:\n{user_text}\n\n"
+            "Return JSON like {\"dish_name\": \"Dish Name\"}. Use null if unsure. Do not add explanations."
+        )),
+    ]
+
+    try:
+        result = await llm.ainvoke(prompt)
+    except Exception:
+        return None
+
+    raw = getattr(result, "content", "")
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        data = json.loads(text)
+        candidate = data.get("dish_name")
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+        return None
+    except json.JSONDecodeError:
+        candidate = text.strip().strip('"')
+        if candidate and candidate.lower() not in {"null", "none", "unknown"}:
+            return candidate
+    return None
+
 
 # ========================
 # Agent State
@@ -40,6 +141,8 @@ class ChatState(BaseModel):
     plan: Optional[dict] = None   # {tool, args}
     tool_result: Optional[str] = None
     clarify_question: Optional[str] = None
+    rewritten_query: Optional[str] = None
+    rewrite_attempted: bool = False
 
 
 # ========================
@@ -150,15 +253,28 @@ def create_internal_chat_app():
 
     async def intent_node(state: ChatState):
         last_human = next((m.content for m in reversed(state.messages) if isinstance(m, HumanMessage)), "")
+        rewrite = None
+        if not state.rewrite_attempted:
+            rewrite = await _rewrite_user_query(state, last_human)
+        else:
+            rewrite = state.rewritten_query
+        query_for_intent = rewrite or last_human
         from src.agent.query_planner import aclassify_intent
-        it = await aclassify_intent(last_human, user_type="internal")
+        it = await aclassify_intent(query_for_intent, user_type="internal")
         get_context_logger("internal").info(f"Intent classified: {it}")
-        return {"intent": it}
+        updates = {"intent": it, "rewrite_attempted": True}
+        if rewrite:
+            updates["rewritten_query"] = rewrite
+        return updates
 
     async def planner_node(state: ChatState):
         last_human = next((m.content for m in reversed(state.messages) if isinstance(m, HumanMessage)), "")
+        rewrite = state.rewritten_query if state.rewrite_attempted else None
+        if rewrite is None:
+            rewrite = await _rewrite_user_query(state, last_human)
+        query_for_plan = rewrite or last_human
         from src.agent.query_planner import aplan_query
-        pl = await aplan_query(last_human, user_type="internal")
+        pl = await aplan_query(query_for_plan, user_type="internal")
         # Heuristic: if planner picked recipe details but omitted identifiers,
         # try to extract a dish name from the latest user message.
         try:
@@ -168,18 +284,28 @@ def create_internal_chat_app():
                 has_name = args.get("dish_name") and str(args.get("dish_name")).strip()
                 if not (has_id or has_name):
                     import re
-                    m = re.search(r"(?:for|about)\s+([A-Za-z0-9][^\n\r]+)$", last_human, flags=re.IGNORECASE)
+                    m = re.search(r"(?:for|about)\s+([A-Za-z0-9][^\n\r]+)$", query_for_plan, flags=re.IGNORECASE)
                     if m:
                         guess = m.group(1).strip().strip(".?!'\" ")
                         if guess:
                             args["dish_name"] = guess
                             pl.args = args
+                if pl and (not args.get("dish_name") and not args.get("recipe_id")):
+                    inferred = await _infer_recipe_from_context(state, query_for_plan)
+                    if inferred:
+                        args = getattr(pl, "args", {}) or {}
+                        args["dish_name"] = inferred
+                        pl.args = args
         except Exception:
             pass
         get_context_logger("internal").info(
             f"Plan: {{'tool': {getattr(pl, 'tool', None)}, 'args': {getattr(pl, 'args', None)}}}"
         )
-        return {"plan": {"tool": pl.tool, "args": pl.args}} if pl else {"plan": None}
+        payload = {"plan": {"tool": pl.tool, "args": pl.args}} if pl else {"plan": None}
+        payload["rewrite_attempted"] = True
+        if rewrite:
+            payload["rewritten_query"] = rewrite
+        return payload
 
     def _clarify_for_plan(plan: Optional[dict]) -> Optional[str]:
         if not plan:
@@ -300,19 +426,47 @@ def create_external_chat_app():
     # Add nodes: intent -> (planner -> exec)? -> agent -> summarize
     async def intent_node(state: ChatState):
         last_human = next((m.content for m in reversed(state.messages) if isinstance(m, HumanMessage)), "")
+        rewrite = None
+        if not state.rewrite_attempted:
+            rewrite = await _rewrite_user_query(state, last_human)
+        else:
+            rewrite = state.rewritten_query
         from src.agent.query_planner import aclassify_intent
-        it = await aclassify_intent(last_human, user_type="external")
+        query_for_intent = rewrite or last_human
+        it = await aclassify_intent(query_for_intent, user_type="external")
         get_context_logger("external").info(f"Intent classified: {it}")
-        return {"intent": it}
+        payload = {"intent": it, "rewrite_attempted": True}
+        if rewrite:
+            payload["rewritten_query"] = rewrite
+        return payload
 
     async def planner_node(state: ChatState):
         last_human = next((m.content for m in reversed(state.messages) if isinstance(m, HumanMessage)), "")
+        rewrite = state.rewritten_query if state.rewrite_attempted else None
+        if rewrite is None:
+            rewrite = await _rewrite_user_query(state, last_human)
+        query_for_plan = rewrite or last_human
         from src.agent.query_planner import aplan_query
-        pl = await aplan_query(last_human, user_type="external")
+        pl = await aplan_query(query_for_plan, user_type="external")
         get_context_logger("external").info(
             f"Plan: {{'tool': {getattr(pl, 'tool', None)}, 'args': {getattr(pl, 'args', None)}}}"
         )
-        return {"plan": {"tool": pl.tool, "args": pl.args}} if pl else {"plan": None}
+        try:
+            if pl and getattr(pl, "tool", None) == "get_menu_item_details":
+                args = getattr(pl, "args", {}) or {}
+                has_name = args.get("dish_name") and str(args.get("dish_name")).strip()
+                if not has_name:
+                    inferred = await _infer_recipe_from_context(state, query_for_plan)
+                    if inferred:
+                        args["dish_name"] = inferred
+                        pl.args = args
+        except Exception:
+            pass
+        payload = {"plan": {"tool": pl.tool, "args": pl.args}} if pl else {"plan": None}
+        payload["rewrite_attempted"] = True
+        if rewrite:
+            payload["rewritten_query"] = rewrite
+        return payload
 
     def _clarify_for_plan(plan: Optional[dict]) -> Optional[str]:
         if not plan:
