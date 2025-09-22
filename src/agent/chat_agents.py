@@ -9,13 +9,7 @@ from typing import List, Any, Optional, Annotated
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
-try:
-    from langgraph.prebuilt.tool_node import ToolNode  # LangGraph >=0.4.8 module form
-except ModuleNotFoundError:  # pragma: no cover - older LangGraph builds
-    try:
-        from langgraph.prebuilt import ToolNode  # type: ignore
-    except (ModuleNotFoundError, ImportError):
-        ToolNode = None  # type: ignore[assignment]
+from langgraph.prebuilt import ToolNode  # type: ignore
 import asyncio
 from pydantic import BaseModel
 
